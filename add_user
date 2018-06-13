@@ -139,7 +139,28 @@
       debug: msg="{{ new_group }}"
 
 #Add to LDAP
+    - name: Add user to LDAP
+      ldap_entry:
+        bind_dn: "{{ bind_user }}"
+        bind_pw: "{{ bind_password }}"
+        server_uri: "{{ ldap_url }}"
+        dn: "{{ new_user_dn }}"
+        objectClass:
+           - top
+           - posixAccount
+           - inetOrgPerson
+           - sambaSamAccount
+        attributes: "{{ new_user }}"
 
-#    uentry['objectClass']=['inetOrgPerson','posixAccount','top','sambaSamAccount']
-#    gentry['objectClass']=['groupOfNames','posixGroup','top','sambaGroupMapping']
-
+    - name: Add group to LDAP
+      ldap_entry:
+        bind_dn: "{{ bind_user }}"
+        bind_pw: "{{ bind_password }}"
+        server_uri: "{{ ldap_url }}"
+        dn: "{{ new_group_dn }}"
+        objectClass:
+           - top
+           - posixGroup
+           - groupOfNames
+           - sambaGroupMapping
+        attributes: "{{ new_group }}"
