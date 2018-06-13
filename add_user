@@ -5,6 +5,8 @@
   gather_facts: false
 
   vars:
+    basedn: 'dc=nurd,dc=space'
+    ldap_url: 'ldaps://ldap.nurdspace.nl'
     all_users:
       filter: (objectClass=posixAccount)
     user:
@@ -15,24 +17,22 @@
     group_sid_base: 'S-1-5-21-2012752457-898622647-'
     group_sid_offset: 4172417153
 
-    new_username: 'anewtestuser'
-    new_firstname: 'Jeff'
-    new_lastname: 'Testuser'
-    new_email: 'nothing@example.com'
-    new_password: 'notaverygoodpassword'
-
   vars_prompt:
-#   - name: "new_username"
-#     prompt: "Username to create"
-#   - name: "new_firstname"
-#     prompt: "First name of new user"
-#   - name: "new_lastname"
-#     prompt: "Last name of new user"
-#   - name: "new_email"
-#     prompt: "Email of new user"
-#   - name: "new_password"
-#     prompt: "Password of new user"
-#     private: yes
+   - name: "new_username"
+     prompt: "Username to create"
+     private: no
+   - name: "new_firstname"
+     prompt: "First name of new user"
+     private: no
+   - name: "new_lastname"
+     prompt: "Last name of new user"
+     private: no
+   - name: "new_email"
+     prompt: "Email of new user"
+     private: no
+   - name: "new_password"
+     prompt: "Password of new user"
+     private: yes
    - name: "bind_user"
      prompt: "user/dn to bind to the LDAP as"
      private: no
@@ -42,7 +42,7 @@
 
   tasks:
     - set_fact:
-        ldap_lookup_config: "{'url': 'ldaps://ldap.nurdspace.nl','base': 'dc=nurd,dc=space','bindpw':'{{bind_password}}','binddn':'{{bind_user}}' }"
+        ldap_lookup_config: "{'url': '{{ ldap_url }}','base': '{{ basedn }}','bindpw':'{{ bind_password }}','binddn':'{{ bind_user }}' }"
 
 #Find the highest UID and GID
     - name: Fetch user
@@ -50,9 +50,6 @@
       with_ldap:
         - context: user
         - petraea
-
-    - name: Show one user
-      debug: msg="{{ lookup('ldap', 'petraea', context='user', value='cn') }}"
 
     - name: Fetch uidNumbers
       debug: msg="{{item.uidNumber}}"
@@ -75,49 +72,74 @@
 #Make new SAMBA config
 
     - set_fact:
-        new_user: "[['uidNumber', {{highest_uid}}+1 ]]"
+        new_user_dn: 'cn={{ new_username }},ou=people,{{ basedn }}'
+
     - set_fact:
-        new_user: "{{new_user}} + [['gidNumber', {{highest_gid}}+1 ]]"
+        new_user_sid: '{{ user_sid_offset + highest_uid|int + 1 }}'
+
     - set_fact:
-        new_user: "{{new_user}} + [['cn', '{{new_firstname}} {{new_lastname}}' ]]"
+        new_userl: "[['uidNumber', {{highest_uid}}+1 ]]"
     - set_fact:
-        new_user: "{{new_user}} + [['sn', '{{new_lastname}}' ]]"
+        new_userl: "{{new_userl}} + [['gidNumber', {{highest_gid}}+1 ]]"
     - set_fact:
-        new_user: "{{new_user}} + [['uid', '{{new_username}}' ]]"
+        new_userl: "{{new_userl}} + [['cn', '{{new_firstname}} {{new_lastname}}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['sn', '{{new_lastname}}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['givenName', '{{new_firstname}}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['uid', '{{new_username}}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['homeDirectory', '/home/{{new_username}}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['loginShell', '/bin/bash' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['mail', '{{ new_email }}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['userPassword', '{{ new_password }}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['sambaNTPassword', '{{ new_password | ntpassword }}' ]]"
+    - set_fact:
+        new_userl: "{{new_userl}} + [['sambaSID', '{{ user_sid_base }}{{ new_user_sid }}' ]]"
+
+    - set_fact:
+        new_user: "{ {% for item in new_userl %}
+        '{{ item[0] }}':'{{item[1]}}' 
+      {% endfor %} }"
+
+#Generate new user group
+
+    - set_fact:
+        new_group_dn: 'cn={{ new_username }},ou=groups,{{ basedn }}'
+
+    - set_fact:
+        new_group_sid: '{{ group_sid_offset + highest_gid|int + 1 }}'
+
+    - set_fact:
+        new_groupl: "[['gidNumber', {{highest_gid}}+1 ]]"
+    - set_fact:
+        new_groupl: "{{new_groupl}} + [['sambaGroupType', '2' ]]"
+    - set_fact:
+        new_groupl: "{{new_groupl}} + [['sambaSID', '{{ group_sid_base }}{{ new_group_sid }}' ]]"
+    - set_fact:
+        new_groupl: "{{new_groupl}} + [['cn', '{{ new_username }}' ]]"
+    - set_fact:
+        new_groupl: "{{new_groupl}} + [['member', '{{ new_user_dn }}' ]]"
+    #Group object
+
+    - set_fact:
+        new_group: "{ {% for item in new_groupl %}
+        '{{ item[0] }}':'{{item[1]}}' 
+      {% endfor %} }"
 
     - name: Show new user
       debug: msg="{{ new_user }}"
 
-    #Calculated values
-#    uid=getNextField('uidNumber')
-#    gid=getNextField('gidNumber')
-#    smbpass = hashlib.new('md4', password.encode('utf-16le')).digest().encode('hex').upper()
+    - name: Show new group
+      debug: msg="{{ new_group }}"
 
-#    uentry={}
-#    uentry['givenName']=[firstname]
-#    uentry['cn']=[firstname+' '+lastname]
-#    uentry['sn']=[lastname]
-#    uentry['uid']=[username]
-#    uentry['homeDirectory']=['/home/'+username]
-#    uentry['uidNumber']=[str(uid)]
-#    uentry['gidNumber']=[str(gid)]
-#    uentry['sambaSID']=[usidbase+str(usidn+uid)]
-#    uentry['loginShell']=['/bin/bash']
-#    uentry['mail']=[mail]
+#Add to LDAP
+
 #    uentry['objectClass']=['inetOrgPerson','posixAccount','top','sambaSamAccount']
-#    uentry['sambaNTPassword']=[smbpass]
-#    uentry['userPassword']=[password]
-#    udn='cn='+uentry['cn'][0]+',ou=people,'+basedn
-#    umod = modlist.addModlist(uentry)
-
-    #Group object
-#    gentry={}
 #    gentry['objectClass']=['groupOfNames','posixGroup','top','sambaGroupMapping']
-#    gentry['sambaGroupType']=['2']
-#    gentry['gidNumber']=[str(gid)]
-#    gentry['sambaSID']=[gsidbase+str(gsidn+gid)]
-#    gentry['cn']=[uentry['uid'][0]]
-#    gentry['member']=[udn]
-#    gdn='cn='+gentry['cn'][0]+',ou=groups,'+basedn
-#    gmod = modlist.addModlist(gentry)
 
