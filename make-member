@@ -1,5 +1,5 @@
 ---
-- name: Delete an LDAP user
+- name: Make a regular user a member
   hosts: localhost
   gather_facts: false
 
