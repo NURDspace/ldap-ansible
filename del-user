@@ -1,0 +1,36 @@
+---
+- name: Delete a user
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    basedn: 'dc=nurd,dc=space'
+    ldap_url: 'ldaps://ldap.nurdspace.nl'
+    user:
+      filter: (uid={{ term }})
+
+  vars_prompt:
+   - name: "username"
+     prompt: "Username to delete"
+     private: no
+   - name: "bind_user"
+     prompt: "user/dn to bind to the LDAP as"
+     private: no
+   - name: "bind_password"
+     prompt: "Password of the bind user"
+     private: yes
+
+  tasks:
+    - set_fact:
+        ldap_lookup_config: "{'url': '{{ ldap_url }}','base': '{{ basedn }}','bindpw':'{{ bind_password }}','binddn':'{{ bind_user }}' }"
+
+     ldap_entry:
+        bind_dn: "{{ bind_user }}"
+        bind_pw: "{{ bind_password }}"
+        server_uri: "{{ ldap_url }}"
+        dn: "{{ item.dn }}"
+        state: absent
+      with_ldap:
+        - context: user
+        - "{{ username }}"
+
