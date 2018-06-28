@@ -1,5 +1,4 @@
 ---
-#playbook to try powering up a VM
 - name: Delete an LDAP user
   hosts: localhost
   gather_facts: false
@@ -25,16 +24,6 @@
     - set_fact:
         ldap_lookup_config: "{'url': '{{ ldap_url }}','base': '{{ basedn }}','bindpw':'{{ bind_password }}','binddn':'{{ bind_user }}' }"
 
-#    - name: Fetch user
-#      debug: msg="{{ item.dn }}"
-#      with_ldap:
-#        - context: user
-#        - "{{ username }}"
-#      register: fetch_user
-
-#    - set_fact:  
-#        user_dn: "{{ fetch_user.msg }}"
-
     - name: Add user to members in LDAP
       ldap_attr:
         bind_dn: "{{ bind_user }}"
@@ -44,7 +33,6 @@
         state: present
         name: member
         values: "{{ item.dn }}"
-#        values: "{{ user_dn }}"
       with_ldap:
         - context: user
         - "{{ username }}"
