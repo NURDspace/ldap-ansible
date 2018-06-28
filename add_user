@@ -1,5 +1,4 @@
 ---
-#playbook to try powering up a VM
 - name: Add a new LDAP User
   hosts: localhost
   gather_facts: false
